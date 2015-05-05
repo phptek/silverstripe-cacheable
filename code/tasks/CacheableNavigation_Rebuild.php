@@ -36,8 +36,6 @@ class CacheableNavigation_Rebuild extends BuildTask {
      * @return void
      */
     public function run($request) {
-        $line_break = Director::is_cli() ? PHP_EOL : "<br />";
-
         $currentStage = Versioned::current_stage();
         
         // Restrict cache rebuild to the given mode
@@ -51,8 +49,33 @@ class CacheableNavigation_Rebuild extends BuildTask {
                 "Live"  => "live",
             );
         }
+        
+        $filter = array();
+        /*
+         * Just build enough to get the main nav built which is 10s of SiteTree objects 
+         * vs potentialaly 1000s.
+         */
+        if($init = $request->getVar('Init')) {
+            $filter = array('ParentID' => 0);
+        }
+        
+        $this->doRebuild($stage_mode_mapping, $filter);
 
-        foreach($stage_mode_mapping as $stage => $mode){
+        Versioned::set_reading_mode($currentStage);
+    }
+    
+    /**
+     * 
+     * Physically perform the rebuild
+     * 
+     * @param array $stages
+     * @param array $filter An array of fields with which to filter the pages used to 
+     * build the cachestore.
+     */
+    private function doRebuild($stages, $filter = array()) {
+        $line_break = Director::is_cli() ? PHP_EOL : "<br />";
+        $siteConfigs = DataObject::get('SiteConfig');
+        foreach($stages as $stage => $mode){
             Versioned::set_reading_mode('Stage.'.$stage);
             if(class_exists('Subsite')){
                 Subsite::disable_subsite_filter(true);
@@ -60,15 +83,18 @@ class CacheableNavigation_Rebuild extends BuildTask {
                 Config::inst()->update("CacheableSiteTree", 'cacheable_fields', array('SubsiteID'));
             }
             
-            $siteConfigs = DataObject::get('SiteConfig');
             foreach($siteConfigs as $config) {                
                 $service = new CacheableNavigationService($mode, $config);
                 $service->refreshCachedConfig();
                 
-                if(class_exists('Subsite')){
+                if(class_exists('Subsite')) {
                     $pages = DataObject::get("Page", "\"SubsiteID\" = '".$config->SubsiteID."'");
-                }else{
+                } else {
                     $pages = DataObject::get("Page");
+                }
+                
+                if($filter) {
+                    $pages = $pages->filter($filter);
                 }
                 
                 if($pages->exists()) {
@@ -90,10 +116,9 @@ class CacheableNavigation_Rebuild extends BuildTask {
                 Subsite::disable_subsite_filter(false);
             }
         }
-
-        Versioned::set_reading_mode($currentStage);
     }
-        
+
+
     /**
      * 
      * Generate a percentage of how complete the cache rebuild is.
