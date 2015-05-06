@@ -36,6 +36,11 @@ class CacheableNavigation_Rebuild extends BuildTask {
      * @return void
      */
     public function run($request) {
+        ini_set('memory_limit', -1);
+        if((int)$maxTime = $request->getVar('MaxTime')) {
+            ini_set('max_execution_time', $maxTime);
+        }
+        
         $currentStage = Versioned::current_stage();
         
         echo 'Cachestore: ' . CacheableConfig::current_cache_mode() . $this->lineBreak(2);
