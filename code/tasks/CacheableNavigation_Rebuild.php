@@ -36,6 +36,8 @@ class CacheableNavigation_Rebuild extends BuildTask {
      * @return void
      */
     public function run($request) {
+        $startTime = time();
+        
         ini_set('memory_limit', -1);
         if((int)$maxTime = $request->getVar('MaxTime')) {
             ini_set('max_execution_time', $maxTime);
@@ -43,13 +45,14 @@ class CacheableNavigation_Rebuild extends BuildTask {
         
         $currentStage = Versioned::current_stage();
         
-        echo 'Cachestore: ' . CacheableConfig::current_cache_mode() . $this->lineBreak(2);
+        echo 'Current Cachestore: ' . CacheableConfig::current_cache_mode() . $this->lineBreak(2);
         
         // Restrict cache rebuild to the given mode
         if($mode = $request->getVar('Mode')) {
             $stage_mode_mapping = array(
                 ucfirst($mode) => strtolower($mode)
             );
+        // All modes
         } else {
             $stage_mode_mapping = array(
                 "Stage" => "stage",
@@ -57,38 +60,51 @@ class CacheableNavigation_Rebuild extends BuildTask {
             );
         }
 
-        foreach($stage_mode_mapping as $stage => $mode){
-            Versioned::set_reading_mode('Stage.'.$stage);
-            if(class_exists('Subsite')){
+        $siteConfigs = DataObject::get('SiteConfig');
+        foreach($stage_mode_mapping as $stage => $mode) {
+            Versioned::set_reading_mode('Stage.' . $stage);
+            if(class_exists('Subsite')) {
                 Subsite::disable_subsite_filter(true);
                 Config::inst()->update("CacheableSiteConfig", 'cacheable_fields', array('SubsiteID'));
                 Config::inst()->update("CacheableSiteTree", 'cacheable_fields', array('SubsiteID'));
             }
             
-            $siteConfigs = DataObject::get('SiteConfig');
             foreach($siteConfigs as $config) {                
                 $service = new CacheableNavigationService($mode, $config);
                 $service->refreshCachedConfig();
-                
-                if(class_exists('Subsite')){
-                    $pages = DataObject::get("Page", "\"SubsiteID\" = '".$config->SubsiteID."'");
-                }else{
-                    $pages = DataObject::get("Page");
+                $table = '';
+                if($stage === 'Live') {
+                    $table = '_' . $stage;
                 }
                 
-                if($pages->exists()) {
+                if(class_exists('Subsite')) {
+                    $pages = $this->getPages($table, "SubsiteID = '" . $config->SubsiteID . "'");
+                } else {
+                    $pages = $this->getPages($table);
+                }
+                
+                if($pages->count()) {
                     $count = 0;
-                    foreach($pages as $page){
-                        $count++;
+                    foreach($pages as $page) {
                         $service->set_model($page);
-                        $percent = $this->percentageComplete($count, $pages->count());
-                        echo 'Caching: ' . $page->Title . ' (' . $percent . ')' . $this->lineBreak();
                         $service->refreshCachedPage();
+                        
+                        $count++;
+                        $percent = $this->percentageComplete($count, $pages->count());
+                        
+                        if($request->getVar('Debug')) {
+                            echo 'Memory Now: ' . memory_get_usage(true) / 1024 / 1024 . 'Mb' . $this->lineBreak();
+                            echo 'Memory Peak: ' . memory_get_peak_usage(true) / 1024 / 1024 . 'Mb' . $this->lineBreak();
+                        }
+                        echo 'Cached: ' . $page->Title . ' (' . $percent . ')' . $this->lineBreak();
+                        unset($page);
                     }
                 }
                 
                 $service->completeBuild();
                 echo $pages->count()." pages cached in $stage mode for subsite " . $config->ID . $this->lineBreak();
+                
+                unset($service);
             }
             
             if(class_exists('Subsite')){
@@ -97,6 +113,11 @@ class CacheableNavigation_Rebuild extends BuildTask {
         }
 
         Versioned::set_reading_mode($currentStage);
+        
+        $endTime = time();
+        $totalTime = ($endTime - $startTime);
+        
+        echo 'Time to run: ' . $totalTime . 's' . $this->lineBreak();
     }
         
     /**
@@ -122,5 +143,55 @@ class CacheableNavigation_Rebuild extends BuildTask {
     public function lineBreak($mul = 1) {
         $line_break = Director::is_cli() ? PHP_EOL : "<br />";
         return str_repeat($line_break, $mul);
+    }
+    
+    /**
+     * 
+     * ~30Mb less peak_memory_usage with SqlQuery vs DataObject::get()
+     * 
+     * @param string $table
+     * @param string $where
+     * @return SS_List
+     */
+    public function getPages($table, $where) {
+        // Method 1).
+//        $pages = DataObject::get("SiteTree$table", $where);
+//        return $pages;
+        //$pages = DataObject::get("Page");
+        
+        // Method 2).
+        
+        $query = new SQLQuery();
+        $query->setFrom("SiteTree$table");
+        $query->selectField('*');
+        $query->setWhere($where);
+        $records = $query->execute();
+        
+        unset($query);
+        
+        $pages = new ArrayList();
+        foreach($records as $record) {
+            $page = new Page($record); // Just a DataObject really
+            $pages->push($page);
+            unset($page);
+        }  
+        
+        return $pages;
+        
+        // Method 3).
+        
+//        $sql = "SELECT * FROM SiteTree$table";
+//        if($where) {
+//            $sql .= ' WHERE ' . $where;
+//        }
+//        $query = DB::query($sql);
+//        $pages = new ArrayList();
+//        while($record = $query->record()) {;
+//            $page = new Page($record); // Just a DataObject really
+//            $pages->push($page);
+//            unset($page);
+//        }
+//        
+//        return $pages;
     }
 }
