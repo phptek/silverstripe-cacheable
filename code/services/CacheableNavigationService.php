@@ -135,6 +135,10 @@ class CacheableNavigationService {
         $cache_frontend->save($cached, $id);
     }
 
+    /**
+     * 
+     * @return boolean
+     */
     public function refreshCachedPage() {
         $model = $this->get_model();
 
@@ -188,7 +192,11 @@ class CacheableNavigationService {
         $cached->set_site_map($site_map);
         $cached->set_root_elements($root_elements);
         $cache_frontend->remove($id);
-        $cache_frontend->save($cached, $id);
+        
+        if($cache_frontend->save($cached, $id)) {
+            return true;
+        }
+        return false;
     }
 
     /**

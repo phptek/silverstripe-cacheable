@@ -99,9 +99,9 @@ a good idea, so this can be overridden in config also:
 __Note:__ The cache rebuild is also skipped when a flush is in effect.
 
 The Rebuild task can be passed a `Versioned` stage "Stage" or "Live" which will restrict
-rebuilding the cache to just the passed mode, thus:
+rebuilding the cache to just the passed stage, thus:
 
-    #> sudo -u www-data ./framework/sake dev/tasks/CacheableNavigation_Rebuild Mode=Live
+    #> sudo -u www-data ./framework/sake dev/tasks/CacheableNavigation_Rebuild Stage=Live
 
 ## FAQ
 
