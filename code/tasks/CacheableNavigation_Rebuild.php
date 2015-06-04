@@ -138,8 +138,11 @@ class CacheableNavigation_Rebuild extends BuildTask {
                         }
                     }
                 }
-                
-                $service->completeBuild();
+        
+                if(!$service->completeBuild()) {
+                    $msg = 'Unable to complete cache build';
+                    throw new CacheableException($msg);
+                }
                 
                 // Completion message
                 $msg = self::new_line() . $pageCount . ' ' . $stage . ' pages in subsite ' . $config->ID;
@@ -184,8 +187,7 @@ class CacheableNavigation_Rebuild extends BuildTask {
         
     /**
      * 
-     * Utility method: Generate a percentage of how complete the cache rebuild is, including
-     * optional memory usage.
+     * Utility method: Generate a percentage of how complete the cache rebuild is.
      * 
      * @param number $count
      * @param number $total
