@@ -82,7 +82,9 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
                 'service' => $this->getService(),
                 'chunk' => $this->getChunk()
         ));
+        
         $this->setCustomConfig($jobConfig);
+        $this->prepareForRestart();
         $this->totalSteps = $this->chunkSize();
     }
 
@@ -198,6 +200,7 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
      */
     public function process() {
         $jobConfig = $this->getCustomConfig();
+        
         $service = $jobConfig['CachableChunkedRefreshJobStorageService']['service'];
         $chunk = $jobConfig['CachableChunkedRefreshJobStorageService']['chunk'];
 
@@ -227,19 +230,24 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
                     throw new CacheableException($msg);
                 }
             }
+            
+            $this->currentStep = $i++;
 
             /*
              * Only if refreshCachedPage() signals it completed A-OK and saved its payload
              * to the cachestore, do we then update the job status to 'complete'.
              */
             if(!$service->refreshCachedPage()) {
-                $msg = 'Unable to cache object#' . $object->ID;
+                $msg = 'Unable to cache object #' . $object->ID;
                 throw new CacheableException($msg);
             }
-
-            $this->currentStep = $i++;
         }
-
+        
+        if($service && !$service->completeBuild()) {
+            $msg = 'Unable to complete cache build';
+            throw new CacheableException($msg);
+        }
+        
         $this->isComplete = true;
     }
 
@@ -266,7 +274,8 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
      * @return string
      */
     public function getSignature() {
-        return md5(get_class($this) . rand());
+        parent::getSignature();
+        return $this->randomSignature();
     }
 
     /**

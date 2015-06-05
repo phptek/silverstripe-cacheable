@@ -105,6 +105,7 @@ class CacheableNavigation_Rebuild extends BuildTask {
                  */
                 $lowPageCount = (self::$chunk_divisor > $pageCount);
                 $doQueue = ($canQueue && !$skipQueue && !$lowPageCount);
+                $doChunking = false;
                 if($pageCount) {
                     $i = 0;
                     $chunkNum = 0;
@@ -139,7 +140,8 @@ class CacheableNavigation_Rebuild extends BuildTask {
                     }
                 }
         
-                if(!$service->completeBuild()) {
+                // Don't prematurely set cache completion status if in queue/chunking mode
+                if(!$doChunking && !$service->completeBuild()) {
                     $msg = 'Unable to complete cache build';
                     throw new CacheableException($msg);
                 }

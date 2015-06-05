@@ -30,6 +30,12 @@ class CacheableNavigationService {
      *
      * @var string
      */
+    protected $stage;
+    
+    /**
+     *
+     * @var string
+     */
     protected $mode;
     
     /**
@@ -50,20 +56,18 @@ class CacheableNavigationService {
 
     /**
      * 
-     * @param string $mode e.g. 'live'
+     * @param string $stage e.g. 'live'
      * @param SiteConfig $config
      * @param DataObject $model
+     * @param string $mode e.g. 'default|queue' Signals to the service to internally 
+     *                                          cache Object cache to avooid pulling 
+     *                                          too much into memory.
      */
-	public function __construct($mode = null, $config = null, $model = null) {
-        if($mode) {
-            $this->mode = $mode;
-        }
-        if($config) {
-            $this->config = $config;
-        }
-        if($model) {
-            $this->model = $model;
-        }
+	public function __construct($stage = null, $config = null, $model = null, $mode = 'default') {
+        $this->stage = $stage;
+        $this->config = $config;
+        $this->model = $model;
+        $this->mode = strtolower($mode);
     }
     
     /**
@@ -86,10 +90,34 @@ class CacheableNavigationService {
         }
     }
 
+    /**
+     * 
+     * @param string
+     */
+	public function set_stage($stage) {
+        $this->stage = $stage;
+    }
+
+    /**
+     * 
+     * @return string
+     */
+	public function get_stage() {
+        return $this->stage;
+    }
+    
+    /**
+     * 
+     * @param string
+     */
 	public function set_mode($mode) {
         $this->mode = $mode;
     }
 
+    /**
+     * 
+     * @return string
+     */
 	public function get_mode() {
         return $this->mode;
     }
@@ -108,6 +136,22 @@ class CacheableNavigationService {
 
 	public function get_model() {
         return $this->model;
+    }
+    
+    /**
+     * 
+     * @return boolean
+     */
+    public function modeIsDefault() {
+        return $this->get_mode() === 'default';
+    }
+    
+    /**
+     * 
+     * @return boolean
+     */
+    public function modeIsQueue() {
+        return $this->get_mode() === 'queue';
     }
 
     /**
@@ -177,10 +221,17 @@ class CacheableNavigationService {
             $this->_cached = $cached;
         }
         
-        $this->_cached->set_site_config($cacheable);
+        // We don't want to use the internal class-cache if we're using job queuing
+        $cached = $this->modeIsDefault() ? $this->_cached : $cached;
+        
+        $cached->set_site_config($cacheable);
         $frontend->remove($id);
         
-        return $frontend->save($this->_cached, $id, array(self::get_default_cache_tag()));
+        return $frontend->save(
+                    $cached, 
+                    $id, 
+                    array(self::get_default_cache_tag())
+                );
     }
 
     /**
@@ -200,13 +251,16 @@ class CacheableNavigationService {
             $this->_cached = $cached;
         }
         
-        $site_map = $this->_cached->get_site_map();
-        $root_elements = $this->_cached->get_root_elements();
+        // We don't want to use the internal class-cache if we're using job queuing
+        $cached = $this->modeIsDefault() ? $this->_cached : $cached;
+        
+        $site_map = $cached->get_site_map();
+        $root_elements = $cached->get_root_elements();
         $model = $this->get_model();
         if(isset($root_elements[$model->ID])) {
             // Remove the object from the sitemap
             unset($root_elements[$model->ID]);
-            $this->_cached->set_root_elements($root_elements);
+            $cached->set_root_elements($root_elements);
         }
         
         if(isset($site_map[$model->ID])) {
@@ -226,11 +280,11 @@ class CacheableNavigationService {
             unset($site_map[$model->ID]);
         }
         
-        $this->_cached->set_site_map($site_map);
+        $cached->set_site_map($site_map);
         $frontend->remove($id);
         
         return $frontend->save(
-                    $this->_cached, 
+                    $cached, 
                     $id, 
                     array(self::get_default_cache_tag())
                 );
@@ -268,8 +322,11 @@ class CacheableNavigationService {
             }
             $this->_cached = $cached;
         }
+        
+        // We don't want to use the internal class-cache if we're using job queuing
+        $cached = $this->modeIsDefault() ? $this->_cached : $cached;
 
-        $site_map = $this->_cached->get_site_map();
+        $site_map = $cached->get_site_map();
         if(isset($site_map[$cacheable->ID])) {
             $parentCached = $site_map[$cacheable->ID]->getParent();
             if($parentCached && $parentCached->ID && isset($site_map[$parentCached->ID])) {
@@ -287,7 +344,7 @@ class CacheableNavigationService {
             unset($site_map[$cacheable->ID]);
         }
         
-        $root_elements = $this->_cached->get_root_elements();
+        $root_elements = $cached->get_root_elements();
         if($cacheable->ParentID) {
             if(!isset($site_map[$cacheable->ParentID])) {
                 $parent = new CacheableSiteTree();
@@ -309,12 +366,12 @@ class CacheableNavigationService {
         }
         
         $site_map[$cacheable->ID] = $cacheable;
-        $this->_cached->set_site_map($site_map);
-        $this->_cached->set_root_elements($root_elements);
+        $cached->set_site_map($site_map);
+        $cached->set_root_elements($root_elements);
         $frontend->remove($id);
         
         return $frontend->save(
-                    $this->_cached, 
+                    $cached, 
                     $id, 
                     array(self::get_default_cache_tag())
                 );
@@ -337,10 +394,13 @@ class CacheableNavigationService {
             $this->_cached = $cached;
         }
         
-        $this->_cached->set_completed(true);
+        // We don't want to use the internal class-cache if we're using job queuing
+        $cached = $this->modeIsDefault() ? $this->_cached : $cached;
+        
+        $cached->set_completed(true);
         
         return $frontend->save(
-                    $this->_cached, 
+                    $cached, 
                     $id, 
                     array(self::get_default_cache_tag())
                 );
