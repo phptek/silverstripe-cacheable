@@ -1,0 +1,18 @@
+language: php
+php:
+  # Create a Docker minion for each supported PHP version
+  - 5.3
+  - 5.4
+  - 5.5
+before_script:
+  - mkdir -p shippable/testresults
+  - mkdir -p shippable/codecoverage
+  - composer self-update
+  - composer install
+  - mysql -e 'create database ss_cacheable_tests'
+  - ./framework/sake dev/build flush=all
+script:
+  - ./framework/sake dev/tests/module/silverstripe-cacheable --log-junit shippable/testresults/junit.xml --coverage-clover shippable/codecoverage
+branches:
+  only:
+    - master
