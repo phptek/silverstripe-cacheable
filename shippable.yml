@@ -13,6 +13,3 @@ before_script:
   - ./framework/sake dev/build flush=all
 script:
   - ./framework/sake dev/tests/module/silverstripe-cacheable --log-junit shippable/testresults/junit.xml --coverage-clover shippable/codecoverage
-branches:
-  only:
-    - master
