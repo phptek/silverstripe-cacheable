@@ -1,46 +1,44 @@
 <?php
 /**
  * 
- * Looking at the refresh BuildTask: We break the entire iteration over the $pages 
- * result-set into chunks depending on peak memory usage which is checked at each
- * iteration. If meory exceeeds a preset limit, we pass processing of the cache-refresh
- * onto a job queue. 
+ * This job is used by the cache-refresh BuildTask. It allows us to break the 
+ * entire SiteTree iteration operation into chunks of a pre-defined size.
  * 
- * The idea is that each chunk should be managable enough in terms of memory and 
+ * The idea is that each chunk should be managable in terms of system memory and 
  * execution time to run even on the smallest of host setups, rather than iteratively 
  * refreshing all objects in the same chunk of N 100s of pages, and consuming a ton 
  * of system resources.
  * 
  * @author Deviate Ltd 2015 http://www.deviate.net.nz
  * @package silverstripe-cachable
- * @see {@link CacheableNavigation_Rebuild}.
+ * @see {@link Cacheable_Rebuild}.
  */
 class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
-    
+
     /**
      * 
      * @var CacheableNavigationService
      */
     protected $service;
-    
+
     /**
      * 
      * @var array
      */
     protected $chunk = array();
-    
+
     /**
      * 
      * @var string
      */
     protected $stage = '';
-    
+
     /**
      * 
      * @var number
      */
     protected $subsiteID = 0;
-    
+
     /**
      * 
      * On each N iterations of the for-loop in $this->process(), we check to see if
@@ -51,7 +49,7 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
      * @var number
      */
     public static $critical_memory_buffer = 2097152; // 2Mb
-    
+
     /**
      * 
      * Sets internal variables and persistent data for when job is created without
@@ -63,24 +61,25 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
      * @param number $subsiteID
      * @return void
      */
-	public function __construct(CacheableNavigationService $service, $chunk, $stage, $subsiteID) {
+
+    public function __construct(CacheableNavigationService $service, $chunk, $stage, $subsiteID) {
         // Setters required for internal methods except $this->process()
         $this->setService($service);
         $this->setChunk($chunk);
         $this->setStage($stage);
         $this->setSubsiteID($subsiteID);
-        
+
         // Persist structured "metadata" about the job using {@link CachableChunkedRefreshJobStorageService}.
         $jobConfig = array(
             'CachableChunkedRefreshJobStorageService' => array(
-                'service'   => $this->getService(),
-                'chunk'     => $this->getChunk()
-                )
-            );
+                'service' => $this->getService(),
+                'chunk' => $this->getChunk()
+            )
+        );
         $this->setCustomConfig($jobConfig);
         $this->totalSteps = $this->chunkSize();
-	}
-    
+    }
+
     /**
      * 
      * @param CacheableNavigationService $service
@@ -88,7 +87,7 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
     public function setService(CacheableNavigationService $service) {
         $this->service = $service;
     }
-    
+
     /**
      * 
      * @param array $chunk
@@ -96,7 +95,7 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
     public function setChunk($chunk) {
         $this->chunk = $chunk;
     }
-    
+
     /**
      * 
      * @param string $stage
@@ -104,7 +103,7 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
     public function setStage($stage) {
         $this->stage = $stage;
     }
-    
+
     /**
      * 
      * @param number $subsiteID
@@ -112,7 +111,7 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
     public function setSubsiteID($subsiteID) {
         $this->subsiteID = $subsiteID;
     }
-    
+
     /**
      * 
      * @return CacheableNavigationService
@@ -120,7 +119,7 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
     public function getService() {
         return $this->service;
     }
-    
+
     /**
      * 
      * @return array
@@ -128,7 +127,7 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
     public function getChunk() {
         return $this->chunk;
     }
-    
+
     /**
      * 
      * @return string
@@ -136,7 +135,7 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
     public function getStage() {
         return $this->stage;
     }
-    
+
     /**
      * 
      * @return number
@@ -144,7 +143,7 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
     public function getSubsiteID() {
         return $this->subsiteID;
     }
-    
+
     /**
      * 
      * Pack all relevant info into the job's so that it's viewable in the
@@ -158,20 +157,20 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
                 . ' ' . $this->chunkSize() . ' objects.'
                 . ($this->getSubsiteID() ? ' (SubsiteID ' . $this->getSubsiteID() . ')' : '')
                 . ' ' . $this->getStage();
-        
+
         return $title;
     }
-    
+
     /**
      * 
      * @return boolean
      */
     public function jobFinished() {
         parent::jobFinished();
-        
+
         return $this->isComplete === true;
     }
-    
+
     /**
      * 
      * @return number
@@ -179,7 +178,7 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
     public function chunkSize() {
         return count($this->getChunk());
     }
-    
+
     /**
      * 
      * The body of the job: Runs the memory-intensive refreshXX() method on each page
@@ -195,42 +194,42 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
         $jobConfig = $this->getCustomConfig();
         $service = $jobConfig['CachableChunkedRefreshJobStorageService']['service'];
         $chunk = $jobConfig['CachableChunkedRefreshJobStorageService']['chunk'];
-        
+
         $i = 1;
         foreach($chunk as $object) {
             $service->set_model($object);
-            
+
             // Check memory on each iteration. Throw exception at a predefined upper limit
             $memThreshold = ((ini_get('memory_limit') * 1024 * 1024) - self::$critical_memory_buffer);
             $memPeak = memory_get_peak_usage(true);
             if($memPeak >= $memThreshold) {
                 throw new CacheableException('Critical memory threshold reached in ' . __CLASS__ . '::process()');
             }
-            
+
             // Only if refreshCachedPage() signals it completed A-OK and saved its payload
             // to the cachestore, do we then update the job status to 'complete'.
             if(!$service->refreshCachedPage(true)) {
                 $errorMsg = 'Unable to cache object#' . $object->ID;
                 $this->addMessage($errorMsg);
             }
-            
+
             $this->currentStep = $i++;
         }
-        
+
         $this->isComplete = true;
     }
-    
-	/**
+
+    /**
      * 
      * Uses the QUEUED type, to ensure we make as efficient use of system resources 
      * as possible.
      * 
-	 * @return number
-	 */
-	public function getJobType() {
-		return QueuedJob::QUEUED;
-	}
-    
+     * @return number
+     */
+    public function getJobType() {
+        return QueuedJob::QUEUED;
+    }
+
     /**
      * 
      * By default {@link AbstractQueuedJob} will only queue 1 "identical" job at 
@@ -246,5 +245,5 @@ class CachableChunkedRefreshJob extends AbstractQueuedJob implements QueuedJob {
         parent::getSignature();
         return $this->randomSignature();
     }
-    
+
 }

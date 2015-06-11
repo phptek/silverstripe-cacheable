@@ -40,7 +40,7 @@ Now run `dev/build` via the browser or command line - and don't forget to flush.
 
 ## Usage
 
-A cache is built after running the `CacheableNavigation_Rebuild` task. This should 
+A cache is built after running the `Cacheable_Rebuild` task. This should 
 be run as the webserver user e.g. www-data via a crontask on your server(s):
 
     #> sudo -u www-data /usr/bin/php path/to/framework/cli-script.php dev/tasks/ProcessJobQueueTask queue=2
@@ -160,7 +160,7 @@ __Note:__ The cache rebuild is also skipped when a flush is in effect.
 The Rebuild task can be passed a `Versioned` stage "Stage" or "Live" which will restrict
 rebuilding the cache to just the passed stage, thus:
 
-    #> sudo -u www-data ./framework/sake dev/tasks/CacheableNavigation_Rebuild Stage=Live
+    #> sudo -u www-data ./framework/sake dev/tasks/Cacheable_Rebuild Stage=Live
 
 By default only a minimal number of class properties and methods are cached. If your
 project makes use of additional properties/methods, simply modify your project's

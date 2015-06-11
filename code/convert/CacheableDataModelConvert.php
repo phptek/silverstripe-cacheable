@@ -1,6 +1,9 @@
 <?php
 /**
  * 
+ * "Converts" (actually creates from-scratch) a given ORM derived model as a cacheable
+ * object.
+ * 
  * @author Deviate Ltd 2014-2015 http://www.deviate.net.nz
  * @package silverstripe-cachable
  */
@@ -21,7 +24,7 @@ class CacheableDataModelConvert extends Convert {
         if(!$cacheableClass) {
             $cacheableClass = "Cacheable" . $model->ClassName;
         }
-        
+
         $cacheable = $cacheableClass::create();
         $cacheable_fields = $cacheable->get_cacheable_fields();
         foreach($cacheable_fields as $field) {
@@ -41,4 +44,5 @@ class CacheableDataModelConvert extends Convert {
 
         return $cacheable;
     }
+
 }

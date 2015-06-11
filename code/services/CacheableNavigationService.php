@@ -13,30 +13,30 @@
 spl_autoload_register('CacheableNavigationService::callback_spl');
 
 class CacheableNavigationService {
-    
+
     /**
      *
      * @var SiteConfig
      */
     protected $config;
-    
+
     /**
      *
      * @var DataObject
      */
     protected $model;
-    
+
     /**
      *
      * @var string
      */
     protected $mode;
-    
+
     /**
      *
      * Internal class-cache for the SiteConfig-cache. This is for performance
      * so we needn't re-call Zend_Cache_Core::load() and suffer exponential increases
-     * in peak memory.
+     * in peak memory when rebuilding the cache.
      * 
      * @var null|Zend_Cache_Frontend_Class
      */
@@ -46,7 +46,7 @@ class CacheableNavigationService {
      *
      * @var Zend_Cache_Frontend_Class
      */
-    private $_cacheable_frontend;
+    private $_cacheableFrontend;
 
     /**
      * 
@@ -54,26 +54,20 @@ class CacheableNavigationService {
      * @param SiteConfig $config
      * @param DataObject $model
      */
-	public function __construct($mode = null, $config = null, $model = null) {
-        if($mode) {
-            $this->mode = $mode;
-        }
-        if($config) {
-            $this->config = $config;
-        }
-        if($model) {
-            $this->model = $model;
-        }
+    public function __construct($mode = null, $config = null, $model = null) {
+        $this->mode = $mode;
+        $this->config = $config;
+        $this->model = $model;
     }
-    
+
     /**
-     * This callback is run before PHP invokes its class-level unserialize()
-     * function and for reasons beyond the realms of human understanding (B.R.O.H.A), the
-     * module is unable to do anything without this static unless you want
-     * {@link Zend_Cache_Frontend_File} to be returned as an instance of _PHP_Incomplete_Class_ 
-     * instead.
      * 
-     * @see // See: http://zend-framework-community.634137.n4.nabble.com/Zend-Cache-dosent-seem-to-be-returning-the-object-I-saved-td646246.html
+     * This callback is always run before PHP invokes its class-level unserialize()
+     * function. The module is unable to do anything without this static. Without it, cache
+     * rebuilding fails causing supposed instances of {@link Zend_Cache_Frontend_File} 
+     * to instead be returned as an instance of _PHP_Incomplete_Class_.
+     * 
+     * @see http://zend-framework-community.634137.n4.nabble.com/Zend-Cache-dosent-seem-to-be-returning-the-object-I-saved-td646246.html
      * @return void
      */
     public static function callback_spl() {
@@ -86,32 +80,57 @@ class CacheableNavigationService {
         }
     }
 
-	public function set_mode($mode) {
+    /**
+     * 
+     * @param string $mode
+     */
+    public function set_mode($mode) {
         $this->mode = $mode;
     }
 
-	public function get_mode() {
+    /**
+     * 
+     * @return string
+     */
+    public function get_mode() {
         return $this->mode;
     }
 
-	public function set_config(SiteConfig $config) {
+    /**
+     * 
+     * @param SiteConfig $config
+     */
+    public function set_config(SiteConfig $config) {
         $this->config = $config;
     }
 
-	public function get_config() {
+    /**
+     * 
+     * @return SiteConfig
+     */
+    public function get_config() {
         return $this->config;
     }
 
-	public function set_model(DataObject $model) {
+    /**
+     * 
+     * @param DataObject $model
+     */
+    public function set_model(DataObject $model) {
         $this->model = $model;
     }
 
-	public function get_model() {
+    /**
+     * 
+     * @return DataObject
+     */
+    public function get_model() {
         return $this->model;
     }
 
     /**
-     * Generates a string-identifier for loading a cache.
+     * 
+     * Generates a string-identifier for accessing and loading a cache.
      * 
      * @return string
      */
@@ -119,43 +138,43 @@ class CacheableNavigationService {
         $configID = $this->get_config() ? $this->get_config()->ID : 1;
         return ucfirst($this->get_mode()) . "Site" . $configID;
     }
-    
+
     /**
      * 
      * Creates and returns an instance of {@link Zend_Cache_Frontend_Class} a proxy
-     * to the picked backend cache-class and  saves a data-structure to it which 
-     * _is_ the cached object.
+     * to the picked backend cache-class and saves a data-structure to it which 
+     * _is_ the cached {@link CachedNavigation} object.
      * 
      * @return CachedNavigation
      */
     public function getCacheableFrontEnd() {
-        if(!$this->_cacheable_frontend) {
+        if(!$this->_cacheableFrontend) {
             $for = CACHEABLE_STORE_FOR;
             $id = $this->getIdentifier();
             $cache = SS_Cache::factory($for, 'Class', array(
-                'lifetime'=>null,
-                'cached_entity'=>'CachedNavigation',
-                'automatic_serialization'=>true
+                'lifetime' => null,
+                'cached_entity' => 'CachedNavigation',
+                'automatic_serialization' => true
             ));
-            
+
             if(!$cached = $cache->load($id)) {
                 $entity = new CachedNavigation();
-                $this->_cacheable_frontend = SS_Cache::factory($for, 'Class', array(
-                    'lifetime'=>null,
-                    'cached_entity'=>$entity,
-                    'automatic_serialization'=>true
+                $this->_cacheableFrontend = SS_Cache::factory($for, 'Class', array(
+                    'lifetime' => null,
+                    'cached_entity' => $entity,
+                    'automatic_serialization' => true
                 ));
-                $this->_cacheable_frontend->save($entity, $id, array(self::get_default_cache_tag()));
+                $this->_cacheableFrontend->save($entity, $id, array(self::get_default_cache_tag()));
             } else {
-                $this->_cacheable_frontend = SS_Cache::factory($for, 'Class', array(
-                    'lifetime'=>null,
-                    'cached_entity'=>$cached,
-                    'automatic_serialization'=>true
+                $this->_cacheableFrontend = SS_Cache::factory($for, 'Class', array(
+                    'lifetime' => null,
+                    'cached_entity' => $cached,
+                    'automatic_serialization' => true
                 ));
             }
-       }
-        
-        return $this->_cacheable_frontend;
+        }
+
+        return $this->_cacheableFrontend;
     }
 
     /**
@@ -176,13 +195,13 @@ class CacheableNavigationService {
             }
             $this->_cached = $cached;
         }
-        
+
         $this->_cached->set_site_config($cacheable);
         $frontend->remove($id);
-        
+
         return $frontend->save(
-                    $this->_cached, 
-                    $id, 
+                    $this->_cached,
+                    $id,
                     array(self::get_default_cache_tag())
                 );
     }
@@ -204,7 +223,7 @@ class CacheableNavigationService {
             }
             $this->_cached = $cached;
         }
-        
+
         $site_map = $this->_cached->get_site_map();
         $root_elements = $this->_cached->get_root_elements();
         $model = $this->get_model();
@@ -213,30 +232,30 @@ class CacheableNavigationService {
             unset($root_elements[$model->ID]);
             $this->_cached->set_root_elements($root_elements);
         }
-        
+
         if(isset($site_map[$model->ID])) {
             $parentCached = $site_map[$model->ID]->getParent();
             if($parentCached && $parentCached->ID && isset($site_map[$parentCached->ID])) {
                 $site_map[$parentCached->ID]->removeChild($model->ID, $forceRemoval);
             }
         }
-        
+
         if($model->ParentID) {
             if(isset($site_map[$model->ParentID])) {
                 $site_map[$model->ParentID]->removeChild($model->ID, $forceRemoval);
             }
         }
-        
+
         if(isset($site_map[$model->ID])) {
             unset($site_map[$model->ID]);
         }
-        
+
         $this->_cached->set_site_map($site_map);
         $frontend->remove($id);
-        
+
         return $frontend->save(
-                    $this->_cached, 
-                    $id, 
+                    $this->_cached,
+                    $id,
                     array(self::get_default_cache_tag())
                 );
     }
@@ -267,7 +286,7 @@ class CacheableNavigationService {
         $cacheable = CacheableDataModelConvert::model2cacheable($model, $cacheableClass);
         $frontend = $this->getCacheableFrontEnd();
         $id = $this->getIdentifier();
-        
+
         if(!$this->_cached) {
             if(!$cached = $frontend->load($id)) {
                 return false;
@@ -281,7 +300,7 @@ class CacheableNavigationService {
             if($parentCached && $parentCached->ID && isset($site_map[$parentCached->ID])) {
                 $site_map[$parentCached->ID]->removeChild($cacheable->ID, $forceRemoval);
             }
-            
+
             $children = $site_map[$cacheable->ID]->getAllChildren();
             if(count($children)) {
                 foreach($children as $child) {
@@ -289,10 +308,10 @@ class CacheableNavigationService {
                     $child->setParent($cacheable);
                 }
             }
-            
+
             unset($site_map[$cacheable->ID]);
         }
-        
+
         $root_elements = $this->_cached->get_root_elements();
         if($cacheable->ParentID) {
             if(!isset($site_map[$cacheable->ParentID])) {
@@ -301,31 +320,30 @@ class CacheableNavigationService {
                 $parent->addChild($cacheable);
                 $cacheable->setParent($parent);
                 $site_map[$cacheable->ParentID] = $parent;
-
             } else {
-                $site_map[$cacheable->ParentID] -> addChild($cacheable);
+                $site_map[$cacheable->ParentID]->addChild($cacheable);
                 $cacheable->setParent($site_map[$cacheable->ParentID]);
             }
-            
+
             if(isset($root_elements[$cacheable->ID])) {
                 unset($root_elements[$cacheable->ID]);
             }
         } else {
             $root_elements[$cacheable->ID] = $cacheable;
         }
-        
+
         $site_map[$cacheable->ID] = $cacheable;
         $this->_cached->set_site_map($site_map);
         $this->_cached->set_root_elements($root_elements);
         $frontend->remove($id);
-        
+
         return $frontend->save(
-                    $this->_cached, 
-                    $id, 
+                    $this->_cached,
+                    $id,
                     array(self::get_default_cache_tag())
                 );
     }
-    
+
     /**
      * 
      * Tell the cache frontend that construction of the cache for the given identifier, 
@@ -342,17 +360,18 @@ class CacheableNavigationService {
             }
             $this->_cached = $cached;
         }
-        
+
         $this->_cached->set_completed(true);
-        
+
         return $frontend->save(
-                    $this->_cached, 
-                    $id, 
+                    $this->_cached,
+                    $id,
                     array(self::get_default_cache_tag())
                 );
     }
-    
+
     /**
+     * 
      * Allows us to clear a specific cache (particulalrly test-caches) based on 
      * Zend_Cache's tagging system.
      * 
@@ -361,7 +380,7 @@ class CacheableNavigationService {
     private static function get_default_cache_tag() {
         return CacheableConfig::is_running_test() ? CACHEABLE_STORE_TAG_DEFAULT_TEST : CACHEABLE_STORE_TAG_DEFAULT;
     }
-    
+
     /**
      * 
      * Simply clears the internal class cache.
@@ -371,12 +390,12 @@ class CacheableNavigationService {
     public function clearInternalCache() {
         $this->_cached = null;
     }
-    
+
     /**
      * 
      * Core method to directly fetch the contents of the stored object-cache. You can utilise 
      * this in custom / project-specific logic to iterate over and return {@link CacheableSiteTree}
-     * and {@link CacheableSiteConfig} objects instead of going to the database.
+     * and {@link CacheableSiteConfig} objects instead of using the ORM.
      * 
      * Example usage:
      * 
@@ -384,7 +403,7 @@ class CacheableNavigationService {
      *  $mode = 'Live';
      *  $conf = SiteConfig::current_site_config();
      *  $cacheService = new CacheableNavigationService($mode, $conf);
-     *  $objectCache = $cacheService->getObjectCache();
+     *  $cache = $cacheService->getObjectCache();
      *  $cachedSiteTree = ArrayList::create($cache->get_site_map());
      *  $cachedSiteConfig = ArrayList::create($cache->get_site_config());
      * <code>
@@ -399,7 +418,8 @@ class CacheableNavigationService {
         if(!$cached = $frontend->load($id)) {
             return false;
         }
-        
+
         return $cached;
     }
+
 }

@@ -1,34 +1,51 @@
 <?php
 /**
  * 
- * This BuildTask pre-primes the filesystem or in-memory caches for {@link SiteTree} and 
+ * This BuildTask pre-primes the filesystem or memory caches for {@link SiteTree} and 
  * {@link SiteConfig} native SilverStripe objects.
  * 
- * The BuildTask should be run from the command-line as the webserver user 
- * e.g. www-data otherwise while attempting to access the site from a browser, the 
- * webserver won't have permission to access the cache. E.g:
+ * The task can be run from the browser via the "tasks" controller or from the 
+ * command-line as the webserver user e.g. www-data, otherwise while attempting to 
+ * access the site from a browser, the webserver won't have permission to access 
+ * the cache.
  * 
  * <code>
- *  #> sudo -u www-data ./framework/sake dev/tasks/CacheableNavigation_Rebuild
+ *  #> sudo -u www-data ./framework/sake dev/tasks/Cacheable_Rebuild
  * <code>
  * 
  * You may pass-in an optional "Stage" parameter, with a value of one of "Live" 
  * or "Stage" which helps when debugging or breaking-up the job to make it more
- * manageable in terms of system resources. It will restrict the cache-rebuild 
+ * manageable in terms of system resources. This will restrict the cache-rebuild 
  * to objects in the given {@Link Versioned} stage. The default is to cache objects
  * in both "Stage" and "Live" modes which takes longer to run and uses more memory.
+ * 
+ * <code>
+ *  #> sudo -u www-data ./framework/sake dev/tasks/Cacheable_Rebuild Stage=Live
+ * <code>
+ * 
+ * Out of the box this task will use a background task via the QueuedJobs module to manage
+ * "chunks" of objects. This is far more efficient in terms of memory usage as QueuedJobs
+ * are invoked via cron and therefore are run as a new instance of the PHP CLI SAPI.
+ * 
+ * You can skip this by passing the SkipQueue parameter as follows:
+ * 
+ * <code>
+ *  #> sudo -u www-data ./framework/sake dev/tasks/Cacheable_Rebuild SkipQueue=1
+ * <code>
+ * 
+ * And of course, these parameters can also be combined.
  * 
  * @author Deviate Ltd 2014-2015 http://www.deviate.net.nz
  * @package silverstripe-cachable
  * @see {@link CacheableNavigation_Clean}.
- * @todo Rename task to better suit the module's new name
- * @todo Cache filled using {@link Zend_Cache_Core::getFillingPercentage()}.
+ * @todo Allow arbitrary classnames to be passed as parameters, so custom DataObject
+ * structures can also be cached. We currently bake-in SiteTree.
  */
-class CacheableNavigation_Rebuild extends BuildTask {
-    
+class Cacheable_Rebuild extends BuildTask {
+
     /**
      * 
-     * A suitable number by which to break-up the total number of pages.
+     * A suitable number by which to break-up the total number of objects to be cached.
      * 
      * The idea is to keep this nunmber relatively low, to ensure each chunk as 
      * a QueuedJob is easily managed by PHP's CLI SAPI in terms of memory usage, 
@@ -37,13 +54,13 @@ class CacheableNavigation_Rebuild extends BuildTask {
      * @var number
      */
     public static $chunk_divisor = 100;
-    
+
     /**
      *
      * @var string
      */
     protected $description = 'Rebuilds silverstripe-cacheable object cache.';
-    
+
     /**
      * 
      * Physically runs the task which - dependent on QueuedJobs being installed and
@@ -57,7 +74,7 @@ class CacheableNavigation_Rebuild extends BuildTask {
         $startTime = time();
         $skipQueue = $request->getVar('SkipQueue');
         $currentStage = Versioned::current_stage();
-        
+
         /*
          * Restrict cache rebuild to the given stage - useful for debugging or
          * "Poor Man's" chunking.
@@ -66,11 +83,11 @@ class CacheableNavigation_Rebuild extends BuildTask {
             $stage_mode_mapping = array(
                 ucfirst($paramStage) => strtolower($paramStage)
             );
-        // All stages
+            // All stages
         } else {
             $stage_mode_mapping = array(
                 "Stage" => "stage",
-                "Live"  => "live",
+                "Live" => "live",
             );
         }
 
@@ -83,22 +100,22 @@ class CacheableNavigation_Rebuild extends BuildTask {
                 Config::inst()->update("CacheableSiteConfig", 'cacheable_fields', array('SubsiteID'));
                 Config::inst()->update("CacheableSiteTree", 'cacheable_fields', array('SubsiteID'));
             }
-            
+
             foreach($siteConfigs as $config) {
                 $service = new CacheableNavigationService($mode, $config);
                 $service->refreshCachedConfig();
-                
+
                 if(class_exists('Subsite')) {
                     $pages = DataObject::get("Page", "SubsiteID = '" . $config->SubsiteID . "'");
                 } else {
                     $pages = DataObject::get("Page");
                 }
-                
+
                 $pageCount = $pages->count();
-                
+
                 /*
-                 * 
                  * Queueing should only occur if:
+                 * 
                  * - QueuedJob module is available
                  * - SkipQueue param is not set
                  * - Total no. pages is greater than the chunk divisor
@@ -116,7 +133,7 @@ class CacheableNavigation_Rebuild extends BuildTask {
                             // Start building a chunk of pages to be refreshed
                             $chunk[] = $page;
                             $chunkSize = count($chunk);
-                            
+
                             /*
                              * Conditions of chunking:
                              * - Initial chunks are chunk-size == self::$chunk_divisor
@@ -129,7 +146,7 @@ class CacheableNavigation_Rebuild extends BuildTask {
                                 echo "Queued chunk #" . $chunkNum . ' (' . $chunkSize . ' objects).' . self::new_line();
                                 $chunk = array();
                             }
-                        // Default to non-chunking if no queuedjobs or script instructed to skip queuing
+                            // Default to non-chunking if no queuedjobs or script instructed to skip queuing
                         } else {
                             $percentComplete = $this->percentageComplete($i, $pageCount);
                             echo 'Caching: ' . trim($page->Title) . ' (' . $percentComplete . ') ' . self::new_line();
@@ -138,9 +155,9 @@ class CacheableNavigation_Rebuild extends BuildTask {
                         }
                     }
                 }
-                
+
                 $service->completeBuild();
-                
+
                 // Completion message
                 $msg = self::new_line() . $pageCount . ' ' . $stage . ' pages in subsite ' . $config->ID;
                 if($doQueue) {
@@ -150,20 +167,20 @@ class CacheableNavigation_Rebuild extends BuildTask {
                 }
                 echo $msg . self::new_line();
             }
-            
-            if(class_exists('Subsite')){
+
+            if(class_exists('Subsite')) {
                 Subsite::disable_subsite_filter(false);
             }
         }
 
         Versioned::set_reading_mode($currentStage);
-        
+
         $endTime = time();
         $totalTime = ($endTime - $startTime);
-        
+
         $this->showConfig($totalTime, $request, $lowPageCount);
     }
-    
+
     /**
      * 
      * Returning boolean true|false this method dictates what gets queued and when.
@@ -175,13 +192,13 @@ class CacheableNavigation_Rebuild extends BuildTask {
      */
     public function chunkForQueue($pageCount, $chunkSize, $count) {
         // The no. items-to-cache in full-chunks
-        $totalFullChunkCount = ((int)floor(round($pageCount / self::$chunk_divisor, 1))) * self::$chunk_divisor;
+        $totalFullChunkCount = ((int) floor(round($pageCount / self::$chunk_divisor, 1))) * self::$chunk_divisor;
         $queueFullChunk = ($chunkSize === self::$chunk_divisor);
         $queuePartChunk = ($count > $totalFullChunkCount && $chunkSize === ($pageCount % self::$chunk_divisor));
-        
+
         return ($queueFullChunk || $queuePartChunk);
     }
-        
+
     /**
      * 
      * Utility method: Generate a percentage of how complete the cache rebuild is, including
@@ -192,10 +209,10 @@ class CacheableNavigation_Rebuild extends BuildTask {
      * @return string
      */
     private function percentageComplete($count, $total) {
-        $calc = (((int)$count / (int)$total) * 100);
+        $calc = (((int) $count / (int) $total) * 100);
         return round($calc, 1) . '%';
     }
-    
+
     /**
      * 
      * Utility method: Current memory usage in Mb.
@@ -205,7 +222,7 @@ class CacheableNavigation_Rebuild extends BuildTask {
     private function memory() {
         return memory_get_peak_usage(true) / 1024 / 1024;
     }
-    
+
     /**
      * 
      * Utility method: Generate an O/S independent new-line, for as many times 
@@ -218,7 +235,7 @@ class CacheableNavigation_Rebuild extends BuildTask {
         $newLine = Director::is_cli() ? PHP_EOL : "<br />";
         return str_repeat($newLine, $mul);
     }
-    
+
     /**
      * 
      * Create a {@link ChunkedCachableRefreshJob} for each "chunk" of N pages
@@ -236,11 +253,12 @@ class CacheableNavigation_Rebuild extends BuildTask {
         $service->clearInternalCache();
         $job = new CachableChunkedRefreshJob($service, $chunk, $stage, $subsiteID);
         $jobDescriptorID = singleton('QueuedJobService')->queueJob($job);
-        
+
         return $jobDescriptorID;
     }
-    
+
     /**
+     * 
      * Summarise the task's configuration details at the end of a run.
      * 
      * @param string $totalTime
@@ -252,16 +270,17 @@ class CacheableNavigation_Rebuild extends BuildTask {
      */
     public function showConfig($totalTime, $request, $lowCount = false) {
         $skipQueue = ($request->getVar('SkipQueue') && $request->getVar('SkipQueue') == 1);
-        
+
         $queueOn = (interface_exists('QueuedJob') ? 'On' : 'Off');
         $queueSkipped = ($skipQueue ? ' (Skipped: User instruction)' : '');
         if($lowCount && !$skipQueue) {
             $queueSkipped = ' (Skipped: Low page count)';
         }
-        
+
         echo 'Job Queue: ' . $queueOn . $queueSkipped . self::new_line();
         echo 'Cache backend: ' . CacheableConfig::current_cache_mode() . self::new_line();
         echo 'Peak memory: ' . $this->memory() . 'Mb' . self::new_line();
         echo 'Execution time: ' . $totalTime . 's' . self::new_line();
     }
+
 }

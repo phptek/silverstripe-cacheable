@@ -3,13 +3,13 @@
  * @author Deviate Ltd 2014-2015 http://www.deviate.net.nz
  * @package silverstripe-cachable
  */
-class CacheableNavigation_RebuildTest extends SapphireTest {
+class Cacheable_RebuildTest extends SapphireTest {
     
     /**
      * Ensure the correct no. chunks and chunk-contents is built each time
      */
     public function testChunkForQueue() {
-        $task = singleton('CacheableNavigation_Rebuild');
+        $task = singleton('Cacheable_Rebuild');
         
         $this->assertTrue($task->chunkForQueue(1167, 100, 1));
         $this->assertTrue($task->chunkForQueue(1167, 100, 100));
