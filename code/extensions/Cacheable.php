@@ -384,6 +384,8 @@ class CacheableConfig {
      */
     public static function configure_file() {     
         $cacheable_store_dir = self::is_running_test() ? CACHEABLE_STORE_DIR_TEST : CACHEABLE_STORE_DIR;
+        // If dev's have recently moved the cache_dir, ensure PHP forgets about the old one
+        clearstatcache();
         if(!is_dir($cacheable_store_dir)) {
             mkdir($cacheable_store_dir, 0777, true);
         }
